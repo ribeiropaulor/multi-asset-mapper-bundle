@@ -1,0 +1,97 @@
+<?php
+
+namespace PRR\MultiAssetMapperBundle\Command\Helper;
+
+use Symfony\Component\AssetMapper\AssetMapper;
+use Symfony\Component\AssetMapper\AssetMapperInterface;
+use Symfony\Component\AssetMapper\CompiledAssetMapperConfigReader;
+use Symfony\Component\AssetMapper\Event\PreAssetsCompileEvent;
+use Symfony\Component\AssetMapper\ImportMap\ImportMapGenerator;
+use Symfony\Component\AssetMapper\Path\PublicAssetsFilesystemInterface;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
+
+/**
+ * Compiles the assets in the asset mapper to the final output directory.
+ *
+ * This command is intended to be used during deployment.
+ *
+ * @author Paulo Ribeiro <paulo@prr.dev.br>
+ */
+final class AssetMapperCompileCommandHelper
+{
+    public function __construct(
+        private readonly CompiledAssetMapperConfigReader $compiledConfigReader,
+        private readonly AssetMapperInterface $assetMapper,
+        private readonly ImportMapGenerator $importMapGenerator,
+        private readonly PublicAssetsFilesystemInterface $assetsFilesystem,
+        private readonly string $projectDir,
+        private readonly bool $isDebug,
+        private readonly ?EventDispatcherInterface $eventDispatcher = null,
+    ) {
+    }
+
+    public function execute(InputInterface $input, OutputInterface $output, SymfonyStyle $io): int
+    {
+        $this->eventDispatcher?->dispatch(new PreAssetsCompileEvent($output));
+
+        // remove existing config files
+        $this->compiledConfigReader->removeConfig(AssetMapper::MANIFEST_FILE_NAME);
+        $this->compiledConfigReader->removeConfig(ImportMapGenerator::IMPORT_MAP_CACHE_FILENAME);
+        $entrypointFiles = [];
+        foreach ($this->importMapGenerator->getEntrypointNames() as $entrypointName) {
+            $path = \sprintf(ImportMapGenerator::ENTRYPOINT_CACHE_FILENAME_PATTERN, $entrypointName);
+            $this->compiledConfigReader->removeConfig($path);
+            $entrypointFiles[$entrypointName] = $path;
+        }
+
+        $manifest = $this->createManifestAndWriteFiles($io);
+        $manifestPath = $this->compiledConfigReader->saveConfig(AssetMapper::MANIFEST_FILE_NAME, $manifest);
+        $io->comment(\sprintf('Manifest written to <info>%s</info>', $this->shortenPath($manifestPath)));
+
+        $importMapPath = $this->compiledConfigReader->saveConfig(ImportMapGenerator::IMPORT_MAP_CACHE_FILENAME, $this->importMapGenerator->getRawImportMapData());
+        $io->comment(\sprintf('Import map data written to <info>%s</info>.', $this->shortenPath($importMapPath)));
+
+        foreach ($entrypointFiles as $entrypointName => $path) {
+            $this->compiledConfigReader->saveConfig($path, $this->importMapGenerator->findEagerEntrypointImports($entrypointName));
+        }
+        $styledEntrypointNames = array_map(static fn (string $entrypointName) => \sprintf('<info>%s</>', $entrypointName), array_keys($entrypointFiles));
+        $io->comment(\sprintf('Entrypoint metadata written for <comment>%d</> entrypoints (%s).', \count($entrypointFiles), implode(', ', $styledEntrypointNames)));
+
+        if ($this->isDebug) {
+            $io->warning(\sprintf(
+                'You are compiling assets in development. Symfony will not serve any changed assets until you delete the files in the "%s" directory.',
+                $this->shortenPath(\dirname($manifestPath))
+            ));
+        }
+
+        return 0;
+    }
+
+    private function shortenPath(string $path): string
+    {
+        return str_replace($this->projectDir.'/', '', $path);
+    }
+
+    private function createManifestAndWriteFiles(SymfonyStyle $io): array
+    {
+        $io->comment(\sprintf('Compiling and writing asset files to <info>%s</info>', $this->shortenPath($this->assetsFilesystem->getDestinationPath())));
+        $manifest = [];
+        foreach ($this->assetMapper->allAssets() as $asset) {
+            if (null !== $asset->content) {
+                // The original content has been modified by the AssetMapperCompiler
+                $this->assetsFilesystem->write($asset->publicPath, $asset->content);
+            } else {
+                $this->assetsFilesystem->copy($asset->sourcePath, $asset->publicPath);
+            }
+
+            $manifest[$asset->logicalPath] = $asset->publicPath;
+        }
+        ksort($manifest);
+        $io->comment(\sprintf('Compiled <info>%d</info> assets', \count($manifest)));
+
+        return $manifest;
+    }
+}
