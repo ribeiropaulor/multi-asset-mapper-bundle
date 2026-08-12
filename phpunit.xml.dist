@@ -12,7 +12,7 @@
     </php>
 
     <testsuites>
-        <testsuite name="MultiPackageAssetMapperBundle Test Suite">
+        <testsuite name="MultiAssetMapperBundle Test Suite">
             <directory>tests/</directory>
         </testsuite>
     </testsuites>

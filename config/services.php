@@ -9,6 +9,7 @@ use PRR\MultiAssetMapperBundle\Command\ImportMapRemoveCommand;
 use PRR\MultiAssetMapperBundle\Command\ImportMapRequireCommand;
 use PRR\MultiAssetMapperBundle\Command\ImportMapUpdateCommand;
 use PRR\MultiAssetMapperBundle\AssetCollectionToolkitRegistry;
+use PRR\MultiAssetMapperBundle\Command\InstallAssetCollectionCommand;
 use PRR\MultiAssetMapperBundle\Twig\Extension\ImportMapExtension;
 use PRR\MultiAssetMapperBundle\Twig\Extension\ImportMapRuntime;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
@@ -85,6 +86,13 @@ return static function (ContainerConfigurator $container): void {
         ->set(ImportMapUpdateCommand::class)
             ->args([
                 service(AssetCollectionToolkitRegistry::class),
+            ])
+            ->tag('console.command')
+
+        ->set(InstallAssetCollectionCommand::class)
+            ->args([
+                service(AssetCollectionToolkitRegistry::class),
+                param('kernel.project_dir')
             ])
             ->tag('console.command')
     ;

@@ -60,12 +60,8 @@ composer require prr/multi-asset-mapper-bundle
 Create `config/packages/multi_asset_mapper.yaml` listing the asset collections you want to manage. In the following
 example, we are managing two asset collections: `admin` and `frontend`.
 
-```yaml
-multi_asset_mapper:
-    # The list of asset collections to manage
-    collections:
-        - admin
-        - frontend
+```bash
+php bin/console mam:asset-collection:install admin frontend
 ```
 
 Now, you have to clear the cache to make the bundle aware of the new configuration:
@@ -133,6 +129,7 @@ The second argument of the `asset` function is the name of the asset collection.
 | `mam:debug:asset-map` | Output all mapped assets |
 | `mam:importmap:outdated` | List outdated JavaScript packages and their latest versions |
 | `mam:importmap:audit` | Check for security vulnerability advisories for dependencies |
+| `mam:asset-collection:install` | Install asset collections |
 
 ## Hotwire Stimulus
 
